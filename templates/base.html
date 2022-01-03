@@ -12,13 +12,15 @@
 
         <link rel="stylesheet" href="{% static 'style.css' %}">
         {% block add_style %}  {% endblock %}
-        <script src="{% static 'main.js' %}"></script>
     </head>
 
     <body>
         {% block body %} {% endblock %}
+
         <main role="main" class="container">
             {% block content %} {% endblock %}
         </main>
+
+        <script src="{% static 'main.js' %}"></script>
     </body>
 </html>
