@@ -1,0 +1,24 @@
+{% load static %}
+{% load bootstrap5 %}
+{% block bootstrap_css %} {% endblock %}
+{% bootstrap_javascript %}
+
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>{% block title %} Home {% endblock %}</title>
+
+        <link rel="stylesheet" href="{% static 'style.css' %}">
+        {% block add_style %}  {% endblock %}
+        <script src="{% static 'main.js' %}"></script>
+    </head>
+
+    <body>
+        {% block body %} {% endblock %}
+        <main role="main" class="container">
+            {% block content %} {% endblock %}
+        </main>
+    </body>
+</html>
