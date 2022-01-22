@@ -1,27 +1,47 @@
+import os
 import threading
-from django.views.decorators import gzip
-from django.http import StreamingHttpResponse
-
-import cv2
-
 # Create your views here.
+import time
+
+from django.http import StreamingHttpResponse
 from django.shortcuts import render
+from django.views import View
+from django.views.decorators import gzip
+import cv2
+import numpy as np
+from django.views.generic import CreateView, ListView
+from tensorflow import keras
+from PIL import Image, ImageFont, ImageDraw  # add caption by using custom font
+from collections import deque
+
+from surveillance.models import Violence, Camera
+
+base_model = keras.applications.mobilenet.MobileNet(input_shape=(160, 160, 3),
+                                                    include_top=False,
+                                                    weights='imagenet', classes=2)
+
+model = keras.models.load_model('static/MobileNet_Model.h5')
 
 
 @gzip.gzip_page
 def home(request):
-    try:
-        cam = VideoCamera()
-        return StreamingHttpResponse(gen(cam), content_type='multipart/x-mixed-replace;boundary=frame')
-    except:
-        pass
-
     return render(request, 'index.html')
 
 
+def video_feed(request):
+    return StreamingHttpResponse(gen(VideoCamera(cid=1)),
+                                 content_type='multipart/x-mixed-replace;boundary=frame')
+
+
+def violence_video_feed(request):
+    return StreamingHttpResponse(gen(ViolenceVideoCamera(cid=1)),
+                                 content_type='multipart/x-mixed-replace;boundary=frame')
+
+
 class VideoCamera(object):
-    def __init__(self):
-        self.video = cv2.VideoCapture(0)
+    def __init__(self, cid):
+        self.camera = Camera.objects.get(pk=cid)
+        self.video = cv2.VideoCapture(int(self.camera.ip))
         (self.grabbed, self.frame) = self.video.read()
         threading.Thread(target=self.update, args=()).start()
 
@@ -38,7 +58,164 @@ class VideoCamera(object):
             (self.grabbed, self.frame) = self.video.read()
 
 
+class ViolenceVideoCamera(object):
+    def __init__(self, cid):
+        self.camera = Camera.objects.get(pk=cid)
+        self.video = cv2.VideoCapture(int(self.camera.ip))
+        (self.grabbed, self.frame) = self.video.read()
+        (self.W, self.H) = (None, None)
+        self.i = 0  # Video seconds number. Iteration of the while loop
+        self.Q = deque(maxlen=128)
+        self.frame_counter = 0  # Number of frames per second. 1 to 30
+        self.frame_list = []
+        self.preds = None
+        self.maxprob = None
+        self.output_path = ""
+        self.writer = None
+        self.video_array = deque(maxlen=150)
+        self.violence_freq = deque(maxlen=5)
+        self.violence_sum = 0
+        threading.Thread(target=self.update, args=()).start()
+
+    def __del__(self):
+        self.video.release()
+
+    def get_frame(self):
+        image = self.frame
+        _, jpeg = cv2.imencode('.jpg', image)
+        return jpeg.tobytes()
+
+    def update(self):
+        while True:
+            (self.grabbed, self.frame) = self.video.read()
+
+            self.frame_counter += 1
+
+            if self.W is None or self.H is None:  # Frame image width (W), height (H) from the movie
+                (self.H, self.W) = self.frame.shape[:2]
+
+            output = self.frame.copy()  # Copy the video frame as is. As an .mp4 file to save/output
+            self.frame = cv2.resize(self.frame, (160, 160))  # > Convert the input array to (160, 160, 3)
+            self.frame_list.append(self.frame)  # Each frame array (160, 160, 3) is appended
+
+            if self.frame_counter >= 30:  # The moment the frame counter reaches 30. The moment when len(
+                # if self.i % 5 == 0:
+                frame_ar = np.array(self.frame_list, dtype=float)
+
+                if np.max(frame_ar) > 1:  # Scaling RGB values in a NumPy array
+                    frame_ar = frame_ar / 255.0
+
+                # MobileNetExtract features from an image array at frames per second with : (1 * 30, 5, 5, 1024)
+                pred_imgarr = base_model.predict(frame_ar)  # > (30, 5, 5, 1024)
+                # Transform the extracted feature arrays into one-dimensional : (1, 30, 5*5*1024)
+                pred_imgarr_dim = pred_imgarr.reshape(1, pred_imgarr.shape[0], 5 * 5 * 1024)  # > (1, 30, 25600)
+                # Store the predictive value of whether each frame is violent or not at 0
+                self.preds = model.predict(pred_imgarr_dim)  # > (True, 0.99) : (Violence, Probability of Violence)
+                print(f'preds:{self.preds}')
+                self.Q.append(self.preds)  # > Deque Add predicted values to Q like a list
+
+                # The average of the probability of violence over the past 5 seconds is taken as the result.
+                if self.i < 5:
+                    results = np.array(self.Q)[:self.i].mean(axis=0)
+                else:
+                    results = np.array(self.Q)[(self.i - 5):self.i].mean(axis=0)
+
+                print(f'Results = {results}')  # > ex : (0.6, 0.650)
+
+                # Maximum Violence Probability Value from Prediction Results
+                self.maxprob = np.max(results)  # > Choose the highest value
+                print(f'Maximum Probability : {self.maxprob}')
+                print('')
+
+                rest = 1 - self.maxprob
+                diff = self.maxprob - rest
+                th = 60
+
+                if diff > 0.60:
+                    th = diff
+
+                if len(self.violence_freq) == 5:
+                    self.violence_sum = self.violence_sum - self.violence_freq[0]
+
+                if self.preds[0][1] >= th:
+                    self.violence_freq.append(1)
+                    self.violence_sum += 1
+                else:
+                    self.violence_freq.append(0)
+
+                if self.violence_sum > 0:
+                    path = 'media/violences/' + str(time.time()) + '.mp4'
+                    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+                    writer = cv2.VideoWriter(path, fourcc, 30, (self.W, self.H), True)
+                    for frame in self.video_array:
+                        writer.write(frame)
+                    writer.release()
+
+                    violence = Violence()
+                    violence.camera = self.camera
+                    violence.video.name = path
+                    violence.save()
+
+                self.frame_list = []
+                self.frame_counter = 0  # > Reset to frame_counter=0 since 1 second (30 frames) has elapsed
+                self.i += 1  # > 1 second elapsed meaning
+
+            font1 = ImageFont.truetype('static/fonts/Raleway-ExtraBold.ttf', int(0.05 * self.W))
+            font2 = ImageFont.truetype('static/fonts/Raleway-ExtraBold.ttf', int(0.1 * self.W))
+
+            if self.preds is not None and self.maxprob is not None:  # from the time the forecast is generated
+                if (self.preds[0][1]) < th:  # > Normal if the probability of violence is less than th
+                    text1_1 = 'Normal'
+                    text1_2 = '{:.2f}%'.format(100 - (self.maxprob * 100))
+                    img_pil = Image.fromarray(output)
+                    draw = ImageDraw.Draw(img_pil)
+                    draw.text((int(0.025 * self.W), int(0.025 * self.H)), text1_1, font=font1, fill=(0, 255, 0, 0))
+                    draw.text((int(0.025 * self.W), int(0.095 * self.H)), text1_2, font=font2, fill=(0, 255, 0, 0))
+                    output = np.array(img_pil)
+
+                else:  # > If the probability of violence is greater than th, it is treated as violence.
+                    text2_1 = 'Violence Alert!'
+                    text2_2 = '{:.2f}%'.format(self.maxprob * 100)
+                    img_pil = Image.fromarray(output)
+                    draw = ImageDraw.Draw(img_pil)
+                    draw.text((int(0.025 * self.W), int(0.025 * self.H)), text2_1, font=font1, fill=(0, 0, 255, 0))
+                    draw.text((int(0.025 * self.W), int(0.095 * self.H)), text2_2, font=font2, fill=(0, 0, 255, 0))
+                    output = np.array(img_pil)
+
+            # Save subtitled video as writer
+            # if writer is None:
+            #     writer = cv2.VideoWriter(output_path, -1, 30, (self.W, self.H), True)
+            # writer.write(output)  # Save the output object as output_path
+            # Show the output in a new window
+            # cv2.imshow('This is output', output)
+            self.frame = output
+            self.video_array.append(output)
+            # print(self.frame_counter)
+            # cv2.waitKey(round(1000 / fps))
+
+
 def gen(camera):
     while True:
         frame = camera.get_frame()
         yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n'
+
+
+class PersonView(CreateView):
+    def get(self):
+        pass
+
+    def post(self):
+        pass
+
+
+class ViolenceListView(ListView):
+    def get_queryset(self):
+        return Violence.objects.all()
+
+
+class CameraView(View):
+    def get(self):
+        pass
+
+    def post(self):
+        pass
