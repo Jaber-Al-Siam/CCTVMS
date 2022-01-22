@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load bootstrap5 %}
+{% block bootstrap_css %} {% bootstrap_css %} {% endblock %}
+{% block title %} Violence {% endblock %}
+
+{% block content %}
+    <!-- ------------ Recent Parcels ---------------- -->
+    {# context is object_list #}
+    {% bootstrap_messages %}
+    <section id="violence">
+        <div class="container">
+            <h4 align="center"> List of Violence </h4><br>
+            {% for violence in object_list %}
+                <div class="company-details">
+                    <div class="reason-col">
+                        <a href="{% url 'parcels:detail' parcel.id %}">
+                            <h4><b> {{ parcel.title }} </b></h4>
+                            <i class="fa fa-glide-g"></i> <span> Tracking ID: {{ parcel.id }} </span><br>
+                            <i class="fa fa-clock-o"></i> <span> Booked On: {{ parcel.booked_on }} </span><br>
+                            <i class="fa fa-spinner"></i> <span> Status: {{ parcel.get_status_display }} </span><br>
+                        </a>
+                    </div>
+                </div>
+            {% empty %}
+                <li>Whooooo, no violence yet!</li>
+            {% endfor %}
+        </div>
+    </section>
+{% endblock %}
