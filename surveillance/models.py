@@ -19,7 +19,6 @@ class Person(models.Model):
         """
         super(Person, self).save(*args, **kwargs)
 
-
 class Camera(models.Model):
     place = models.CharField(max_length=100)
     ip = models.CharField(max_length=100, unique=True)
