@@ -48,7 +48,7 @@ class Camera(models.Model):
 class Violence(models.Model):
     time = models.DateTimeField(auto_now_add=True)
     camera = models.ForeignKey(Camera, on_delete=models.CASCADE)
-    video = models.FileField(upload_to='violences')
+    video = models.FileField(upload_to='violences', blank=True)
     involved_persons = models.ManyToManyField(Person, blank=True)
 
     def save(self, *args, **kwargs):

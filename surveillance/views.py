@@ -13,8 +13,8 @@ from django.views.generic import CreateView, ListView
 from tensorflow import keras
 from PIL import Image, ImageFont, ImageDraw  # add caption by using custom font
 from collections import deque
-
-from surveillance.models import Violence, Camera
+from surveillance.face_recognizer import match_face
+from surveillance.models import Violence, Camera, Person
 
 base_model = keras.applications.mobilenet.MobileNet(input_shape=(160, 160, 3),
                                                     include_top=False,
@@ -144,17 +144,24 @@ class ViolenceVideoCamera(object):
                     self.violence_freq.append(0)
 
                 if self.violence_sum > 0:
-                    path = 'media/violences/' + str(time.time()) + '.mp4'
-                    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-                    writer = cv2.VideoWriter(path, fourcc, 30, (self.W, self.H), True)
-                    for frame in self.video_array:
-                        writer.write(frame)
-                    writer.release()
-
-                    violence = Violence()
-                    violence.camera = self.camera
-                    violence.video.name = path
-                    violence.save()
+                    threading.Thread(target=save_violence, args=(self.video_array.copy(), self.W, self.H, self.camera)).start()
+                    # path = 'media/violences/' + str(time.time()) + '.mp4'
+                    # fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+                    # writer = cv2.VideoWriter(path, fourcc, 30, (self.W, self.H), True)
+                    # violence = Violence()
+                    # violence.camera = self.camera
+                    # violence.save()
+                    #
+                    # for frame in self.video_array:
+                    #     writer.write(frame)
+                    #     faces = match_face(frame)
+                    #     for face in faces:
+                    #         person = Person.objects.filter(pk=face).first()
+                    #         if person:
+                    #             violence.involved_persons.add(person)
+                    # writer.release()
+                    # violence.video.name = path
+                    # violence.save()
 
                 self.frame_list = []
                 self.frame_counter = 0  # > Reset to frame_counter=0 since 1 second (30 frames) has elapsed
@@ -219,3 +226,25 @@ class CameraView(View):
 
     def post(self):
         pass
+
+
+def save_violence(video_array, w, h, camera):
+    print('save video called')
+    path = 'media/violences/' + str(time.time()) + '.mp4'
+    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+    writer = cv2.VideoWriter(path, fourcc, 30, (w, h), True)
+    violence = Violence()
+    violence.camera = camera
+    violence.save()
+
+    for frame in video_array:
+        writer.write(frame)
+        faces = match_face(frame)
+        for face in faces:
+            person = Person.objects.filter(pk=face).first()
+            if person:
+                violence.involved_persons.add(person)
+    writer.release()
+    violence.video.name = path
+    violence.save()
+    print('save video finished')

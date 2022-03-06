@@ -55,26 +55,24 @@ def save_face_from_image_path(single_face_image_path, face_id):
 
 def save_face_from_video_path(video_path, face_id):
     try:
-        print(video_path)
         known_face_encodings = _read_list_of_objects_from_file(_KNOWN_FACE_ENCODINGS_FILE)
         known_face_ids = _read_list_of_objects_from_file(_KNOWN_FACE_IDS_FILE)
         cap = cv2.VideoCapture(video_path)
         grabbed, frame = cap.read()
-        if grabbed:
-            print('Video Grabbed')
-            cv2.imwrite("grabbed.jpg", frame)
-
         frame_count = 0
+
         while grabbed:
-            face_encoding = face_recognition.face_encodings(frame)[0]
-            known_face_encodings.append(face_encoding)
-            known_face_ids.append(face_id)
+            face_encoding = face_recognition.face_encodings(frame)
+            if len(face_encoding) > 0:
+                known_face_encodings.append(face_encoding[0])
+                known_face_ids.append(face_id)
+                print(frame_count)
             grabbed, frame = cap.read()
             frame_count += 1
 
         _save_list_of_objects_to_file(filepath=_KNOWN_FACE_ENCODINGS_FILE, obj_list=known_face_encodings)
         _save_list_of_objects_to_file(filepath=_KNOWN_FACE_IDS_FILE, obj_list=known_face_ids)
-        print(frame_count)
+        print('Finish')
     except Exception as e:
         print(f'error inside save_face() function, error={str(e)}')
 
