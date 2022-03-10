@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %} Cameras {% endblock %}
+
+{% block content %}
+
+    <section class="camera-list">
+        {% for camera in object_list %}
+            <a href="{% url 'surveillance:camera_detail_view' camera.pk %}">
+                <figure>
+                    <img src="{% url 'surveillance:violence_video_feed' camera.pk %}">
+                    <fig-camption>
+                        <br>
+                        <strong>{{ camera.place }}</strong>
+                    </fig-camption>
+                </figure>
+            </a>
+        {% endfor %}
+    </section>
+
+{% endblock %}

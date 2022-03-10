@@ -9,7 +9,7 @@ from django.views import View
 from django.views.decorators import gzip
 import cv2
 import numpy as np
-from django.views.generic import CreateView, ListView
+from django.views.generic import CreateView, ListView, DeleteView, DetailView
 from tensorflow import keras
 from PIL import Image, ImageFont, ImageDraw  # add caption by using custom font
 from collections import deque
@@ -28,21 +28,24 @@ def home(request):
     return render(request, 'index.html')
 
 
-def video_feed(request):
-    return StreamingHttpResponse(gen(VideoCamera(cid=1)),
+def video_feed(request, cid):
+    return StreamingHttpResponse(gen(VideoCamera(cid=cid)),
                                  content_type='multipart/x-mixed-replace;boundary=frame')
 
 
-def violence_video_feed(request):
-    return StreamingHttpResponse(gen(ViolenceVideoCamera(cid=1)),
+def violence_video_feed(request, cid):
+    return StreamingHttpResponse(gen(ViolenceVideoCamera(cid=cid)),
                                  content_type='multipart/x-mixed-replace;boundary=frame')
 
 
 class VideoCamera(object):
     def __init__(self, cid):
         self.camera = Camera.objects.get(pk=cid)
-        self.video = cv2.VideoCapture(int(self.camera.ip))
+        self.video = cv2.VideoCapture(self.camera.ip)
         (self.grabbed, self.frame) = self.video.read()
+        if not self.grabbed:
+            self.video = cv2.VideoCapture(int(self.camera.ip))
+            (self.grabbed, self.frame) = self.video.read()
         threading.Thread(target=self.update, args=()).start()
 
     def __del__(self):
@@ -54,15 +57,18 @@ class VideoCamera(object):
         return jpeg.tobytes()
 
     def update(self):
-        while True:
+        while self.grabbed:
             (self.grabbed, self.frame) = self.video.read()
 
 
 class ViolenceVideoCamera(object):
     def __init__(self, cid):
         self.camera = Camera.objects.get(pk=cid)
-        self.video = cv2.VideoCapture(int(self.camera.ip))
+        self.video = cv2.VideoCapture(self.camera.ip)
         (self.grabbed, self.frame) = self.video.read()
+        if not self.grabbed:
+            self.video = cv2.VideoCapture(int(self.camera.ip))
+            (self.grabbed, self.frame) = self.video.read()
         (self.W, self.H) = (None, None)
         self.i = 0  # Video seconds number. Iteration of the while loop
         self.Q = deque(maxlen=128)
@@ -86,7 +92,7 @@ class ViolenceVideoCamera(object):
         return jpeg.tobytes()
 
     def update(self):
-        while True:
+        while self.grabbed:
             (self.grabbed, self.frame) = self.video.read()
 
             self.frame_counter += 1
@@ -144,7 +150,8 @@ class ViolenceVideoCamera(object):
                     self.violence_freq.append(0)
 
                 if self.violence_sum > 0:
-                    threading.Thread(target=save_violence, args=(self.video_array.copy(), self.W, self.H, self.camera)).start()
+                    threading.Thread(target=save_violence,
+                                     args=(self.video_array.copy(), self.W, self.H, self.camera)).start()
                     # path = 'media/violences/' + str(time.time()) + '.mp4'
                     # fourcc = cv2.VideoWriter_fourcc(*'DIVX')
                     # writer = cv2.VideoWriter(path, fourcc, 30, (self.W, self.H), True)
@@ -207,29 +214,7 @@ def gen(camera):
         yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n'
 
 
-class PersonView(CreateView):
-    def get(self):
-        pass
-
-    def post(self):
-        pass
-
-
-class ViolenceListView(ListView):
-    def get_queryset(self):
-        return Violence.objects.all()
-
-
-class CameraView(View):
-    def get(self):
-        pass
-
-    def post(self):
-        pass
-
-
 def save_violence(video_array, w, h, camera):
-    print('save video called')
     path = 'media/violences/' + str(time.time()) + '.mp4'
     fourcc = cv2.VideoWriter_fourcc(*'DIVX')
     writer = cv2.VideoWriter(path, fourcc, 30, (w, h), True)
@@ -248,3 +233,12 @@ def save_violence(video_array, w, h, camera):
     violence.video.name = path
     violence.save()
     print('save video finished')
+
+
+class CameraListView(ListView):
+    def get_queryset(self):
+        return Camera.objects.all()
+
+
+class CameraDetailsView(DetailView):
+    model = Camera

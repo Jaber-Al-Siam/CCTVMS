@@ -8,7 +8,8 @@ app_name = 'surveillance'
 
 urlpatterns = [
     path('', surveillance_views.home, name="home_page"),
-    path('video_feed', surveillance_views.video_feed, name="video_feed"),
-    path('violence_video_feed', surveillance_views.violence_video_feed, name="violence_video_feed"),
-    path('violence_list', surveillance_views.ViolenceListView.as_view(), name="violence_list_view"),
+    path('cameras', surveillance_views.CameraListView.as_view(), name="camera_list_view"),
+    path('cameras/<int:pk>', surveillance_views.CameraDetailsView.as_view(), name="camera_detail_view"),
+    path('video_feed/<int:cid>', surveillance_views.video_feed, name="video_feed"),
+    path('violence_video_feed/<int:cid>', surveillance_views.violence_video_feed, name="violence_video_feed"),
 ]
