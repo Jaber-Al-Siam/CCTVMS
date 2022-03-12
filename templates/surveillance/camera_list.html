@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %} Cameras {% endblock %}
+
+{% block add_style %}
+    <link rel="stylesheet" href="{% static 'surveillance/css/camera-list-view.css' %}">
+{% endblock %}
 
 {% block content %}
 
@@ -11,6 +16,7 @@
                     <img src="{% url 'surveillance:violence_video_feed' camera.pk %}">
                     <fig-camption>
                         <br>
+                        <strong>Camera-{{ camera.pk }}</strong><br>
                         <strong>{{ camera.place }}</strong>
                     </fig-camption>
                 </figure>

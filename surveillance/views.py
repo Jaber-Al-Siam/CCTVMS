@@ -1,18 +1,21 @@
-import os
+# Create your views here.
 import threading
 # Create your views here.
 import time
+from collections import deque
 
-from django.http import StreamingHttpResponse
-from django.shortcuts import render
-from django.views import View
-from django.views.decorators import gzip
 import cv2
 import numpy as np
-from django.views.generic import CreateView, ListView, DeleteView, DetailView
-from tensorflow import keras
 from PIL import Image, ImageFont, ImageDraw  # add caption by using custom font
-from collections import deque
+from decouple import config
+from django.contrib import messages
+from django.core.mail import send_mail
+from django.http import StreamingHttpResponse
+from django.shortcuts import render
+from django.views.decorators import gzip
+from django.views.generic import ListView, DetailView
+from tensorflow import keras
+
 from surveillance.face_recognizer import match_face
 from surveillance.models import Violence, Camera, Person
 
@@ -25,7 +28,11 @@ model = keras.models.load_model('static/MobileNet_Model.h5')
 
 @gzip.gzip_page
 def home(request):
-    return render(request, 'index.html')
+    object_list = Camera.objects.all()
+    context = {
+        'object_list': object_list,
+    }
+    return render(request, 'base.html', context=context)
 
 
 def video_feed(request, cid):
@@ -79,8 +86,7 @@ class ViolenceVideoCamera(object):
         self.output_path = ""
         self.writer = None
         self.video_array = deque(maxlen=150)
-        self.violence_freq = deque(maxlen=5)
-        self.violence_sum = 0
+        self.after_violence = 0
         threading.Thread(target=self.update, args=()).start()
 
     def __del__(self):
@@ -140,35 +146,11 @@ class ViolenceVideoCamera(object):
                 if diff > 0.60:
                     th = diff
 
-                if len(self.violence_freq) == 5:
-                    self.violence_sum = self.violence_sum - self.violence_freq[0]
-
-                if self.preds[0][1] >= th:
-                    self.violence_freq.append(1)
-                    self.violence_sum += 1
-                else:
-                    self.violence_freq.append(0)
-
-                if self.violence_sum > 0:
+                if self.after_violence > 1:
                     threading.Thread(target=save_violence,
                                      args=(self.video_array.copy(), self.W, self.H, self.camera)).start()
-                    # path = 'media/violences/' + str(time.time()) + '.mp4'
-                    # fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-                    # writer = cv2.VideoWriter(path, fourcc, 30, (self.W, self.H), True)
-                    # violence = Violence()
-                    # violence.camera = self.camera
-                    # violence.save()
-                    #
-                    # for frame in self.video_array:
-                    #     writer.write(frame)
-                    #     faces = match_face(frame)
-                    #     for face in faces:
-                    #         person = Person.objects.filter(pk=face).first()
-                    #         if person:
-                    #             violence.involved_persons.add(person)
-                    # writer.release()
-                    # violence.video.name = path
-                    # violence.save()
+                    self.video_array.clear()
+                    self.after_violence = 0
 
                 self.frame_list = []
                 self.frame_counter = 0  # > Reset to frame_counter=0 since 1 second (30 frames) has elapsed
@@ -186,7 +168,8 @@ class ViolenceVideoCamera(object):
                     draw.text((int(0.025 * self.W), int(0.025 * self.H)), text1_1, font=font1, fill=(0, 255, 0, 0))
                     draw.text((int(0.025 * self.W), int(0.095 * self.H)), text1_2, font=font2, fill=(0, 255, 0, 0))
                     output = np.array(img_pil)
-
+                    if self.after_violence > 0:
+                        self.after_violence += 1
                 else:  # > If the probability of violence is greater than th, it is treated as violence.
                     text2_1 = 'Violence Alert!'
                     text2_2 = '{:.2f}%'.format(self.maxprob * 100)
@@ -195,6 +178,7 @@ class ViolenceVideoCamera(object):
                     draw.text((int(0.025 * self.W), int(0.025 * self.H)), text2_1, font=font1, fill=(0, 0, 255, 0))
                     draw.text((int(0.025 * self.W), int(0.095 * self.H)), text2_2, font=font2, fill=(0, 0, 255, 0))
                     output = np.array(img_pil)
+                    self.after_violence = 1
 
             # Save subtitled video as writer
             # if writer is None:
@@ -220,6 +204,7 @@ def save_violence(video_array, w, h, camera):
     writer = cv2.VideoWriter(path, fourcc, 30, (w, h), True)
     violence = Violence()
     violence.camera = camera
+    message = 'Dear concern,\n\nViolence detected in your camera ' + str(camera.pk) + '. Involved persons are:'
     violence.save()
 
     for frame in video_array:
@@ -229,10 +214,24 @@ def save_violence(video_array, w, h, camera):
             person = Person.objects.filter(pk=face).first()
             if person:
                 violence.involved_persons.add(person)
+
     writer.release()
     violence.video.name = path
     violence.save()
+    persons = violence.involved_persons.all()
+
+    for person in persons:
+        message += ' ' + person.name + ','
+
     print('save video finished')
+    message += '. Video clip is saved in database naming ' + path + '. Please check admin site for more information.' \
+                                                                    '\n\nRegards\nTeam Violence'
+    send_mail(
+        subject='New Violence Detected',
+        message=message,
+        from_email=config('EMAIL'),
+        recipient_list=['jaber.siam@northsouth.edu', ],
+    )
 
 
 class CameraListView(ListView):

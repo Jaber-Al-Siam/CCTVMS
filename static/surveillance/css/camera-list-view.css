@@ -1,0 +1,28 @@
+.camera-list
+{
+    background: white;
+    color: gray;
+    padding: 20px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.camera-list figure
+{
+    border: 2px solid gray;
+    border-radius: 5%;
+    text-align: center;
+    /*text-transform: uppercase;*/
+    width: 300px;
+    padding: 20px;
+    margin: 15px;
+}
+
+.camera-list figure img
+{
+    padding: 5px;
+    width: 200px;
+    height: 150px;
+}

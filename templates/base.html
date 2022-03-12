@@ -1,6 +1,5 @@
 {% load static %}
 {% load bootstrap5 %}
-{% block bootstrap_css %} {% endblock %}
 {% bootstrap_javascript %}
 
 <html lang="en">
@@ -10,7 +9,7 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>{% block title %} Admin Surv UI | Dashboard {% endblock %}</title>
 
-    <link rel="stylesheet" href="{% static 'style.css' %}">
+
     <link rel="stylesheet" href="{% static 'surveillance/css/bootstrap.min.css' %}">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="{% static 'surveillance/css/font-awesome.min.css' %}">
@@ -43,6 +42,7 @@
     <!-- Google Font -->
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
+    <link rel="stylesheet" href="{% static 'style.css' %}">
     {% block add_style %}  {% endblock %}
 </head>
 
@@ -151,16 +151,16 @@
                 <li class="active treeview">
                     <a href="{% url 'surveillance:camera_list_view' %}">
                         <i class="fa fa-camera"> Camera </i>
-{#                        <span class="pull-right-container">#}
-{#                            <i class="fa fa-angle-left pull-right"></i>#}
-{#                        </span>#}
+                        <span class="pull-right-container">
+                            <i class="fa fa-angle-left pull-right"></i>
+                        </span>
                     </a>
-{#                    <ul class="treeview-menu">#}
-{#                        <li class="active"><a href="{% url 'surveillance:camera_list_view' %}"><i class="fa fa-circle-o"></i> Camera 1</a></li>#}
-{#                        <li><a href="#"><i class="fa fa-circle-o"></i> Camera 2</a></li>#}
-{#                        <li class="active"><a href="#"><i class="fa fa-circle-o"></i> Camera 3</a></li>#}
-{#                        <li><a href="#"><i class="fa fa-circle-o"></i> Camera 4</a></li>#}
-{#                    </ul>#}
+                    <ul class="treeview-menu">
+                        <li class="active"><a href="{% url 'surveillance:camera_list_view' %}"><i class="fa fa-circle-o"></i> All Camera </a></li>
+                        {% for camera in object_list %}
+                            <li class="active"><a href="{% url 'surveillance:camera_detail_view' camera.pk %}"><i class="fa fa-circle-o"></i> Camera {{ camera.pk }}</a></li>
+                        {% endfor %}
+                    </ul>
                 </li>
             </ul>
         </section>
@@ -181,39 +181,16 @@
             </ol>
         </section>
         <p align="center">
-            {#            <img src="{% url 'surveillance:video_feed' %}">#}
+            {% bootstrap_messages %}
             {% block content %}
 
             {% endblock %}
         </p>
 
-
-        <!-- /.control-sidebar-menu -->
-
-        <!-- /.control-sidebar-menu -->
-
     </div>
-    <!-- /.tab-pane -->
-    <!-- Stats tab content -->
+
     <div class="tab-pane" id="control-sidebar-stats-tab">Stats Tab Content</div>
-    <!-- /.tab-pane -->
-    <!-- Settings tab content -->
 
-    <!-- /.form-group -->
-
-
-    <!-- /.form-group -->
-
-    <!-- /.form-group -->
-
-
-    <!-- /.form-group -->
-
-
-    <!-- /.form-group -->
-
-
-    <!-- /.form-group -->
     </form>
 </div>
 <!-- /.tab-pane -->
